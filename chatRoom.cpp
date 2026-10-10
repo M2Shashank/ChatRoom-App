@@ -1,13 +1,20 @@
-#include "chatRoom.hpp";
+#include "chatRoom.hpp"
 
+// Initializes a session with an accepted socket and the room it belongs to.
+Session::Session(tcp::socket s, Room &room)
+    : clientSocket(std::move(s)), room(room) {}
+
+// Adds a participant to the room's participant set.
 void Room::join(ParticipantPointer participant) {
     this -> participants.insert(participant);
 }
 
+// Removes a participant from the room's participant set.
 void Room::leave(ParticipantPointer participant) {
     this -> participants.erase(participant);
 }
 
+// Broadcasts a message to all participants other than the sender.
 void Room::deliver(ParticipantPointer participant, Message &message) {
     messageQueue.push_back(message);
     while(!messageQueue.empty()) {
@@ -22,6 +29,7 @@ void Room::deliver(ParticipantPointer participant, Message &message) {
     }
 }
 
+// Starts an asynchronous read and processes each complete client message.
 void Session::async_read() {
     auto self(shared_from_this());
 
@@ -45,6 +53,7 @@ void Session::async_read() {
     });
 }
 
+// Starts an asynchronous write of a message body to the client.
 void Session::async_write(std::string messageBody, size_t messageLength) {
     auto write_handler = [&](boost::system::error_code ec, std::size_t bytes_transferred) {
         if(!ec) {
@@ -56,6 +65,7 @@ void Session::async_write(std::string messageBody, size_t messageLength) {
     boost::asio::async_write(clientSocket, boost::asio::buffer(messageBody, messageLength), write_handler);
 }
 
+// Decodes, queues, and sends a message to this session's client.
 void Session::write(Message &message) {
     messageQueue.push_back(message);
     while(messageQueue.size() != 0) {
@@ -64,7 +74,7 @@ void Session::write(Message &message) {
 
         bool header_decode = message.decodeHeader();
         if(header_decode) {
-            std::string body = message.getData();
+            std::string body = message.getBody();
             async_write(body, message.getBodyLength());
         }else {
             std::cout << "Message length exceeds the max length" << std::endl;
@@ -72,10 +82,12 @@ void Session::write(Message &message) {
     }
 }
 
+// Sends a message from this session to the room for broadcasting.
 void Session::deliver(Message &message) {
     room.deliver(shared_from_this(), message);
 }
 
+// Registers the session with the room and begins reading from the client.
 void Session::start() {
     room.join(shared_from_this());
     async_read();
@@ -83,6 +95,7 @@ void Session::start() {
 
 using boost::asio::ip::address_v4;
 
+// Accepts clients asynchronously and creates a session for each connection.
 void accept_connection(boost::asio::io_context &io, char *port, tcp::acceptor &acceptor, Room &room, const tcp::endpoint &endpoint) {
     tcp::socket socket(io);
     acceptor.async_accept([&](boost::system::error_code ec, tcp::socket socket) {
@@ -94,6 +107,7 @@ void accept_connection(boost::asio::io_context &io, char *port, tcp::acceptor &a
     });
 }
 
+// Creates the server, starts accepting connections, and runs the I/O loop.
 int main(int argc, char *argv[]) {
     try {
         if(argc < 2) {
