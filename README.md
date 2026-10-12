@@ -66,4 +66,3 @@ You can launch multiple client instances to simulate a room. Type a message in o
 
 - The server expects a port argument when launched.
 - Messages are terminated by a newline (`\n`) in the client input flow.
-- The project is intended as a learning/example chat server and is not a production-grade messaging platform.
